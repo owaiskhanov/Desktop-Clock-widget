@@ -1203,7 +1203,7 @@ class SettingsWindow:
                     "world_size", "text_color", "caption_color", "date_color",
                     "gap"):
             self.draft[key] = DEFAULT_CONFIG[key]
-        for scale, key in self._scales.items():
+        for key, scale in self._scales.items():
             scale.set(self.draft[key])
         self.date_entry.delete(0, "end")
         self.date_entry.insert(0, self.draft["date_format"])
