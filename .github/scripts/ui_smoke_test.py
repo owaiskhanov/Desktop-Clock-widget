@@ -164,6 +164,7 @@ def check_glyphs(root: tk.Tk) -> None:
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "failure.txt").unlink(missing_ok=True)
     watchdog(180.0)
     cw.enable_dpi_awareness()
     cw.load_bundled_fonts()
@@ -305,28 +306,32 @@ def main() -> int:
     capture(toplevel_hwnd(root), OUT / "clock-chakra.png")
 
     print("compact / high-DPI geometry")
+    # Emulate other machines by faking the screen size and the DPI *before*
+    # the dialog is built, exactly as the real app would see them.
+    real_fpixels = root.winfo_fpixels
+    real_screen = root.winfo_screenheight
     for screen_h, screen_w, dpi in ((768, 1366, 96), (1080, 1920, 144)):
+        root.winfo_fpixels = lambda what, d=dpi: (
+            d if what == "1i" else real_fpixels(what))
+        root.winfo_screenheight = lambda h=screen_h: h
         settings2 = cw.SettingsWindow(app)
         settings2.win.winfo_screenheight = lambda h=screen_h: h
         settings2.win.winfo_screenwidth = lambda w=screen_w: w
-        settings2.dpi_scale = dpi / 96.0
-        settings2.compact = screen_h < 900
-        settings2.preview_factor = 0.44 if settings2.compact else 0.62
-        settings2.list_height = 246 if settings2.compact else cw.CARD_LIST_H
-        settings2.canvas.configure(height=settings2.px(settings2.list_height))
-        settings2._restyle_preview()
-        settings2._fit_pages()
         settings2._center()
         pump(root, 0.5)
         h = settings2.win.winfo_height()
-        rows_visible = settings2.canvas.winfo_height()
-        print(f"  {screen_w}x{screen_h} @{dpi} dpi -> window {h}px, "
-              f"list {rows_visible}px")
-        assert rows_visible >= 140, rows_visible
+        w = settings2.win.winfo_width()
+        list_h = settings2.canvas.winfo_height()
+        print(f"  {screen_w}x{screen_h} @ {dpi/96:.0%} -> window {w}x{h}, "
+              f"list {list_h}px, scale {settings2.dpi_scale:.2f}")
+        assert list_h >= 140, list_h
         assert h <= screen_h - 30, (h, screen_h)
+        assert w <= screen_w - 20, (w, screen_w)
         capture(toplevel_hwnd(settings2.win), OUT / f"settings-{screen_h}p.png")
         settings2.close()
         pump(root, 0.2)
+    root.winfo_fpixels = real_fpixels
+    root.winfo_screenheight = real_screen
 
     print("menu")
     menu = tk.Menu(root, tearoff=0)
