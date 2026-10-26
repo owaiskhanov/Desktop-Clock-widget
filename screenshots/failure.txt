@@ -1,8 +1,8 @@
 Traceback (most recent call last):
-  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 298, in <module>
+  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 315, in <module>
     sys.exit(main())
              ^^^^^^
-  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 239, in main
-    assert settings.draft["date_format"].startswith("%d.%m.%Y")
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError
+  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 230, in main
+    assert bottom <= panel.winfo_height(), (bottom, panel.winfo_height())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (246, 208)
