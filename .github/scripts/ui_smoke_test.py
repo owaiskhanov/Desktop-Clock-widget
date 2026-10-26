@@ -212,6 +212,9 @@ def main() -> int:
     rows = max(int(c.grid_info()["row"]) for c in settings.list_inner.winfo_children()) + 1
     print(f"  cards: {len(settings._cards)} in {rows} rows")
     assert rows <= 4, rows
+    visible = settings.canvas.winfo_height()
+    print(f"  visible list height: {visible}px (compact={settings.compact})")
+    assert visible >= settings.px(146), visible
 
     # a card whose content is taller than the card would be silently clipped
     for family, parts in settings._cards.items():
@@ -300,6 +303,30 @@ def main() -> int:
                         "show_seconds": True})
     pump(root, 0.8)
     capture(toplevel_hwnd(root), OUT / "clock-chakra.png")
+
+    print("compact / high-DPI geometry")
+    for screen_h, screen_w, dpi in ((768, 1366, 96), (1080, 1920, 144)):
+        settings2 = cw.SettingsWindow(app)
+        settings2.win.winfo_screenheight = lambda h=screen_h: h
+        settings2.win.winfo_screenwidth = lambda w=screen_w: w
+        settings2.dpi_scale = dpi / 96.0
+        settings2.compact = screen_h < 900
+        settings2.preview_factor = 0.44 if settings2.compact else 0.62
+        settings2.list_height = 246 if settings2.compact else cw.CARD_LIST_H
+        settings2.canvas.configure(height=settings2.px(settings2.list_height))
+        settings2._restyle_preview()
+        settings2._fit_pages()
+        settings2._center()
+        pump(root, 0.5)
+        h = settings2.win.winfo_height()
+        rows_visible = settings2.canvas.winfo_height()
+        print(f"  {screen_w}x{screen_h} @{dpi} dpi -> window {h}px, "
+              f"list {rows_visible}px")
+        assert rows_visible >= 140, rows_visible
+        assert h <= screen_h - 30, (h, screen_h)
+        capture(toplevel_hwnd(settings2.win), OUT / f"settings-{screen_h}p.png")
+        settings2.close()
+        pump(root, 0.2)
 
     print("menu")
     menu = tk.Menu(root, tearoff=0)

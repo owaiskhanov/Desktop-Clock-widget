@@ -754,6 +754,14 @@ class SettingsWindow:
             self.dpi_scale = max(1.0, self.root.winfo_fpixels("1i") / 96.0)
         except tk.TclError:
             self.dpi_scale = 1.0
+        try:
+            screen_h = self.root.winfo_screenheight()
+        except tk.TclError:
+            screen_h = 1080
+        # 1366x768 laptops are common: shrink the preview, not the font list
+        self.compact = screen_h < 900
+        self.preview_factor = 0.44 if self.compact else 0.62
+        self.list_height = 246 if self.compact else CARD_LIST_H
         self._cards: dict[str, list] = {}
         self._swatches: dict[str, tk.Frame] = {}
         self._swatch_colors: dict[str, str] = {}
@@ -824,7 +832,7 @@ class SettingsWindow:
         max_h = screen_h - self.px(90)              # titlebar + taskbar + slack
         if h > max_h:
             excess = h - max_h
-            new_h = max(150, self.canvas.winfo_height() - excess)
+            new_h = max(self.px(150), self.canvas.winfo_height() - excess)
             self.canvas.configure(height=new_h)
             self._fit_pages()
             self.win.update_idletasks()
@@ -981,7 +989,7 @@ class SettingsWindow:
         holder = tk.Frame(page, bg=UI_BG)
         holder.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(holder, bg=UI_BG, highlightthickness=0, bd=0,
-                                height=self.px(CARD_LIST_H), width=400)
+                                height=self.px(self.list_height), width=400)
         self.scrollbar = ThinScrollbar(holder, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.scrollbar.pack(side="right", fill="y", padx=(5, 2))
@@ -1044,7 +1052,8 @@ class SettingsWindow:
         """Re-derive every preview font and colour from the current draft."""
         fam = self.draft["font_family"]
         # A miniature of the real widget: pixel sizes, roughly scaled down.
-        big = -max(24, min(int(self.draft["digit_size"] * 0.62), 104))
+        big = -max(22, min(int(self.draft["digit_size"]
+                             * self.preview_factor), 104))
         cap = -max(8, min(int(self.draft["caption_size"] * 0.95), 18))
         date = -max(9, min(int(self.draft["date_size"] * 0.95), 18))
         world = -max(9, min(int(self.draft["world_size"] * 0.8), 18))
