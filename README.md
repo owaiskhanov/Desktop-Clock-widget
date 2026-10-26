@@ -3,6 +3,8 @@
 A frameless, transparent digital clock that lives **on your Windows desktop** — behind
 your windows, above your wallpaper, with no title bar and no taskbar button.
 
+![The clock on a wallpaper](assets/preview_1280.png)
+
 ```
    MONDAY, 26 OCTOBER
    HOURS   MINUTES   SECONDS
@@ -20,10 +22,11 @@ Single `.exe`, ~12 MB.
 
 **Option A — download the prebuilt binary**
 
-1. Open the [Actions tab](../../actions/workflows/build-windows-exe.yml) of this repo.
-2. Pick the newest green *Build Windows EXE* run.
-3. Download the **DesktopClock-windows-x64** artifact (it contains `DesktopClock.exe`).
-4. Put `DesktopClock.exe` anywhere you like and double-click it.
+1. Grab `DesktopClock.exe` from the [latest release](../../releases/latest) — direct link:
+   [`releases/latest/download/DesktopClock.exe`](../../releases/latest/download/DesktopClock.exe).
+2. Or open the [Actions tab](../../actions/workflows/build-windows-exe.yml), pick the newest
+   green *Build Windows EXE* run and download the **DesktopClock-windows-x64** artifact.
+3. Put `DesktopClock.exe` anywhere you like and double-click it.
 
 The build runs on `windows-latest` with PyInstaller, so the file is a genuine
 Windows executable (no console window).
@@ -105,9 +108,11 @@ Example — big black clock for a light wallpaper, one world clock:
 
 * `overrideredirect(True)` removes the frame; `-transparentcolor #010101` makes that exact
   shade fully see-through, so only the glyphs remain.
-* The window handle is re-parented onto the **WorkerW** window (the layer between the
-  wallpaper and the icons) or z-ordered behind *Progman*, which is what keeps it glued to
-  the desktop. It is re-asserted every ~3 s because Explorer occasionally resets z-order.
+* The window is pushed to the **bottom of the top-level z-order** (`HWND_BOTTOM`), so it
+  sits above the wallpaper and under every normal window, and it is re-asserted every ~3 s
+  (and after each drag) because Explorer and window activation keep rearranging things.
+  Setting `behind_icons: true` instead re-parents it onto the **WorkerW** window, i.e.
+  underneath the desktop icons.
 * It also carries `WS_EX_TOOLWINDOW`, so it never appears in the taskbar or Alt+Tab.
 * Redraws are aligned to the next second boundary instead of a fixed 200 ms timer, so the
   seconds change exactly when your system clock does.
@@ -129,6 +134,6 @@ assets/icon.ico, assets/icon.png       app icon
 * Windows only for the desktop-pinning and transparency tricks; on Linux/macOS the
   window still runs, but without chroma-key transparency.
 * If *Show desktop icons* is off, Explorer may not create the WorkerW window; the app then
-  falls back to z-ordering behind Progman (still invisible under full-screen windows).
+  falls back to bottom-of-z-order placement (still visible, still covered by windows).
 * Tray icon: not included — the widget is meant to be forgotten about. Close it from the
   right-click menu.

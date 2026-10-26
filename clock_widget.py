@@ -86,9 +86,11 @@ SWP_NOACTIVATE = 0x0010
 SWP_NOOWNERZORDER = 0x0200
 SWP_NOSENDCHANGING = 0x0400
 HWND_NOTOPMOST = -2
+HWND_BOTTOM = 1
 GWL_EXSTYLE = -20
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_APPWINDOW = 0x00040000
+WS_EX_NOACTIVATE = 0x08000000
 WM_SPAWN_WORKER = 0x052C
 
 if IS_WINDOWS:
@@ -195,6 +197,7 @@ class DesktopLayer:
             self.hwnd = _user32.GetParent(root.winfo_id()) or root.winfo_id()
             # a real handle of our own, independent of later reparenting
             ex = _user32.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
+            # tool window -> no taskbar button and no Alt+Tab entry
             _user32.SetWindowLongW(
                 self.hwnd, GWL_EXSTYLE,
                 (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)
@@ -227,15 +230,18 @@ class DesktopLayer:
 
     # -- internals ------------------------------------------------------- #
     def _pin(self) -> None:
-        worker = _wallpaper_worker() if self.behind_icons else None
-        if worker and self.parent != worker:
-            _user32.SetParent(self.hwnd, worker)
-            self.parent = worker
-        if self.parent:
-            return
-        progman = _user32.FindWindowW("Progman", None)
+        if self.behind_icons:
+            worker = _wallpaper_worker()
+            if worker and self.parent != worker:
+                _user32.SetParent(self.hwnd, worker)
+                self.parent = worker
+            if self.parent:
+                return
+        # Bottom of the top-level z-order: above the wallpaper, below every
+        # normal window. Inserting *after* Progman would hide us behind the
+        # desktop, which is why HWND_BOTTOM is used instead.
         _user32.SetWindowPos(
-            self.hwnd, progman, 0, 0, 0, 0,
+            self.hwnd, HWND_BOTTOM, 0, 0, 0, 0,
             SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
             | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING)
 
@@ -405,6 +411,7 @@ class ClockWidget:
     def start_drag(self, event) -> None:
         self._drag = (event.x_root, event.y_root,
                       self.root.winfo_x(), self.root.winfo_y())
+        self.root.after(120, self.layer.keep)   # a click may have raised us
 
     def do_drag(self, event) -> None:
         if not self._drag:
@@ -419,6 +426,8 @@ class ClockWidget:
         self._drag = None
         self.cfg["position"] = list(self._offset)
         save_config(self.cfg)
+        # dragging can raise the window; drop it back onto the desktop
+        self.root.after(50, self.layer.keep)
 
     def popup_menu(self, event) -> None:
         if getattr(self, "_menu", None) is not None:
