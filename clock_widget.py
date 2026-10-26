@@ -695,6 +695,7 @@ class ThinScrollbar(tk.Canvas):
         self._grab_offset = 0
         self._thumb = self.create_rectangle(0, 0, 6, 20, fill=UI_LINE,
                                             outline="")
+        self._min_thumb = 18
         self.bind("<Configure>", lambda _e: self._redraw())
         self.bind("<Button-1>", self._press)
         self.bind("<B1-Motion>", self._drag)
@@ -747,6 +748,12 @@ class SettingsWindow:
         self.root = app.root
         self.draft = dict(app.cfg)
         self.ui = ui_font_family(self.root)
+        # Point-sized fonts grow with the display scaling; the fixed pixel
+        # geometry has to grow with them or the dialog clips at 125-200 %.
+        try:
+            self.dpi_scale = max(1.0, self.root.winfo_fpixels("1i") / 96.0)
+        except tk.TclError:
+            self.dpi_scale = 1.0
         self._cards: dict[str, list] = {}
         self._swatches: dict[str, tk.Frame] = {}
         self._swatch_colors: dict[str, str] = {}
@@ -811,10 +818,10 @@ class SettingsWindow:
         outer = self.win.winfo_children()[0]
         screen_w, screen_h = (self.win.winfo_screenwidth(),
                               self.win.winfo_screenheight())
-        w = max(SETTINGS_W, outer.winfo_reqwidth())
+        w = max(self.px(SETTINGS_W), outer.winfo_reqwidth())
         h = outer.winfo_reqheight()
 
-        max_h = screen_h - 90                      # title bar + taskbar + slack
+        max_h = screen_h - self.px(90)              # titlebar + taskbar + slack
         if h > max_h:
             excess = h - max_h
             new_h = max(150, self.canvas.winfo_height() - excess)
@@ -831,6 +838,9 @@ class SettingsWindow:
 
     def f(self, size: int, bold: bool = False):
         return (self.ui, size, "bold") if bold else (self.ui, size)
+
+    def px(self, value: float) -> int:
+        return int(round(value * self.dpi_scale))
 
     def _label(self, parent, text, size=9, color=UI_TEXT, bold=False, bg=UI_BG,
                **kw) -> tk.Label:
@@ -971,7 +981,7 @@ class SettingsWindow:
         holder = tk.Frame(page, bg=UI_BG)
         holder.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(holder, bg=UI_BG, highlightthickness=0, bd=0,
-                                height=CARD_LIST_H, width=400)
+                                height=self.px(CARD_LIST_H), width=400)
         self.scrollbar = ThinScrollbar(holder, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.scrollbar.pack(side="right", fill="y", padx=(5, 2))
@@ -1072,7 +1082,7 @@ class SettingsWindow:
     def _add_card(self, family: str, blurb: str, index: int) -> None:
         card = tk.Frame(self.list_inner, bg=UI_CARD, cursor="hand2",
                         highlightthickness=1, highlightbackground=UI_CARD,
-                        height=CARD_HEIGHT)
+                        height=self.px(CARD_HEIGHT))
         card.grid(row=index // CARD_COLUMNS, column=index % CARD_COLUMNS,
                   sticky="nsew", padx=(0, 7), pady=(0, 7))
         card.pack_propagate(False)
@@ -1234,8 +1244,8 @@ class SettingsWindow:
                          command=changed, bg=UI_BG, fg=UI_TEXT,
                          troughcolor=UI_CARD, activebackground=UI_ACCENT,
                          highlightthickness=0, bd=0, relief="flat",
-                         sliderrelief="flat", sliderlength=16, width=6,
-                         showvalue=0, cursor="hand2")
+                         sliderrelief="flat", sliderlength=self.px(18),
+                         width=self.px(9), showvalue=0, cursor="hand2")
         scale.set(self.draft[key])
         scale.pack(fill="x", pady=(1, 0))
         self._scales[key] = scale

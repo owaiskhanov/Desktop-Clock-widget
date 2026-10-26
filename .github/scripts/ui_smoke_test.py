@@ -218,7 +218,7 @@ def main() -> int:
         card, name, sample, sub = parts
         card.update_idletasks()
         needed = (name.winfo_reqheight() + sub.winfo_reqheight()
-                  + 7 + 7 + 2)
+                  + 7 + 7 + 2 + 4)
         assert needed <= card.winfo_height(), (
             f"{family}: content {needed}px > card {card.winfo_height()}px")
 
