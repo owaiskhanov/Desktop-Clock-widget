@@ -211,6 +211,23 @@ def main() -> int:
     rows = max(int(c.grid_info()["row"]) for c in settings.list_inner.winfo_children()) + 1
     print(f"  cards: {len(settings._cards)} in {rows} rows")
     assert rows <= 4, rows
+
+    # a card whose content is taller than the card would be silently clipped
+    for family, parts in settings._cards.items():
+        card, name, sample, sub = parts
+        card.update_idletasks()
+        needed = (name.winfo_reqheight() + sub.winfo_reqheight()
+                  + 7 + 7 + 2)
+        assert needed <= card.winfo_height(), (
+            f"{family}: content {needed}px > card {card.winfo_height()}px")
+
+    # the preview digits must fit inside the preview panel
+    panel = settings.pv_digits[0].master.master
+    pump(root, 0.2)
+    bottom = max(lbl.winfo_y() + lbl.winfo_height()
+                 for lbl in settings.pv_digits + settings.pv_colon)
+    print(f"  preview content: {bottom}px in a {panel.winfo_height()}px panel")
+    assert bottom <= panel.winfo_height(), (bottom, panel.winfo_height())
     capture(toplevel_hwnd(settings.win), OUT / "settings-fonts.png")
 
     print("scroll list with the wheel")
@@ -234,7 +251,7 @@ def main() -> int:
     print("date format + colour + slider")
     settings.date_entry.delete(0, "end")
     settings.date_entry.insert(0, "%d.%m.%Y  ·  W%V")
-    settings.date_entry.event_generate("<KeyRelease>")
+    settings._date_changed()
     pump(root, 0.3)
     assert settings.draft["date_format"].startswith("%d.%m.%Y")
     settings._swatches["Cargo"].winfo_children()[0].event_generate("<Button-1>")

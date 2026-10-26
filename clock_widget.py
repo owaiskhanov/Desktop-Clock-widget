@@ -670,7 +670,8 @@ UI_ACCENT = "#FF6A13"
 UI_ACCENT_TEXT = "#141414"
 
 SETTINGS_W = 920
-CARD_COLUMNS, CARD_HEIGHT = 3, 68
+CARD_COLUMNS, CARD_HEIGHT = 3, 74
+PREVIEW_H = 208
 
 
 def ui_font_family(root) -> str:
@@ -923,7 +924,7 @@ class SettingsWindow:
     # -- font page ------------------------------------------------------- #
     def _build_font_page(self, page) -> None:
         preview = tk.Frame(page, bg=UI_PANEL, highlightthickness=1,
-                           highlightbackground=UI_LINE, height=168)
+                           highlightbackground=UI_LINE, height=PREVIEW_H)
         preview.pack(fill="x")
         preview.pack_propagate(False)
         self._build_preview(preview)
@@ -993,14 +994,15 @@ class SettingsWindow:
         for i, col in enumerate((0, 2, 4)):
             cap = self._label(grid, ("HOURS", "MINUTES", "SECONDS")[i],
                               size=7, color=UI_DIM, bg=UI_PANEL)
-            cap.grid(row=1, column=col, padx=(0, 14), pady=(2, 0))
+            cap.grid(row=1, column=col, padx=(0, 10), pady=(2, 0))
             self.pv_captions.append(cap)
-            lbl = tk.Label(grid, text="00", bg=UI_PANEL, fg=UI_TEXT)
-            lbl.grid(row=2, column=col, padx=(0, 14))
+            lbl = tk.Label(grid, text="00", bg=UI_PANEL, fg=UI_TEXT,
+                           anchor="center")
+            lbl.grid(row=2, column=col, padx=(0, 10), sticky="ew")
             self.pv_digits.append(lbl)
             if i < 2:
                 cl = tk.Label(grid, text=":", bg=UI_PANEL, fg=UI_TEXT)
-                cl.grid(row=2, column=col + 1, padx=(0, 14))
+                cl.grid(row=2, column=col + 1, padx=(0, 10))
                 self.pv_colon.append(cl)
 
         self.pv_world = self._label(grid, "", size=8, color=UI_DIM, bg=UI_PANEL)
@@ -1011,7 +1013,7 @@ class SettingsWindow:
         """Re-derive every preview font and colour from the current draft."""
         fam = self.draft["font_family"]
         # A miniature of the real widget: pixel sizes, roughly scaled down.
-        big = -max(24, min(int(self.draft["digit_size"] * 0.56), 92))
+        big = -max(24, min(int(self.draft["digit_size"] * 0.62), 104))
         cap = -max(8, min(int(self.draft["caption_size"] * 0.95), 18))
         date = -max(9, min(int(self.draft["date_size"] * 0.95), 18))
         world = -max(9, min(int(self.draft["world_size"] * 0.8), 18))
@@ -1057,16 +1059,16 @@ class SettingsWindow:
         card.grid_propagate(False)
         card.columnconfigure(0, weight=1)
 
-        name = tk.Label(card, text=family, font=(family, 12), fg=UI_TEXT,
+        name = tk.Label(card, text=family, font=(family, 11), fg=UI_TEXT,
                         bg=UI_CARD, anchor="w")
-        name.grid(row=0, column=0, sticky="w", padx=(11, 2), pady=(9, 0))
-        sample = tk.Label(card, text="10:24", font=(family, 15, "bold"),
+        name.grid(row=0, column=0, sticky="w", padx=(11, 2), pady=(7, 0))
+        sample = tk.Label(card, text="10:24", font=(family, 14, "bold"),
                           fg=UI_MUTED, bg=UI_CARD, anchor="e")
-        sample.grid(row=0, column=1, sticky="e", padx=(0, 11), pady=(7, 0))
+        sample.grid(row=0, column=1, sticky="e", padx=(0, 11), pady=(5, 0))
         sub = tk.Label(card, text=blurb or "installed", font=self.f(8),
                        fg=UI_DIM, bg=UI_CARD, anchor="w")
         sub.grid(row=1, column=0, columnspan=2, sticky="w",
-                 padx=11, pady=(1, 9))
+                 padx=11, pady=(0, 7))
 
         parts = (card, name, sample, sub)
         self._cards[family] = [card, name, sample, sub]
@@ -1325,6 +1327,7 @@ class SettingsWindow:
 
     # -- actions --------------------------------------------------------- #
     def apply(self) -> None:
+        self.draft["date_format"] = self.date_entry.get()
         self.app.apply_settings(dict(self.draft))
         self.btn_apply.config(text="Applied ✓", bg="#22A559",
                               activebackground="#2CC066", fg="#FFFFFF")
