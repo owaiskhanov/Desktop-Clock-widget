@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 298, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 239, in main
+    assert settings.draft["date_format"].startswith("%d.%m.%Y")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
