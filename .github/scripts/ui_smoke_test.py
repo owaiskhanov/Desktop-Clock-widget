@@ -265,7 +265,10 @@ def main() -> int:
     settings._reset_look()
     pump(root, 0.3)
     assert settings.draft["text_color"] == "#FFFFFF"
+    assert settings.draft["font_family"] == cw.DEFAULT_CONFIG["font_family"]
     settings._show_tab("font")
+    settings._pick("Orbitron")
+    pump(root, 0.2)
 
     print("applying")
     settings.apply()
