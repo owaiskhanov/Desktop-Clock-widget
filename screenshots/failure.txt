@@ -2,9 +2,7 @@ Traceback (most recent call last):
   File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 316, in <module>
     sys.exit(main())
              ^^^^^^
-  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 265, in main
-    settings._reset_look()
-  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\clock_widget.py", line 1207, in _reset_look
-    scale.set(self.draft[key])
-    ^^^^^^^^^
-AttributeError: 'str' object has no attribute 'set'
+  File "D:\a\Desktop-Clock-widget\Desktop-Clock-widget\.github\scripts\ui_smoke_test.py", line 273, in main
+    assert app.cfg["font_family"] == "Orbitron", app.cfg["font_family"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Chakra Petch
