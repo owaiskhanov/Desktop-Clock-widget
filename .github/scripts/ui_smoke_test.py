@@ -371,7 +371,11 @@ def main() -> int:
     pump(root, 0.5)
     right = root.winfo_x() + root.winfo_width()
     print(f"  clock right edge {right} on a {screen_w}px screen")
-    assert right <= screen_w + 2, (right, screen_w)
+    assert right <= screen_w + 2, (
+        f"right={right} screen={screen_w} x={root.winfo_x()} "
+        f"w={root.winfo_width()} reqw={root.winfo_reqwidth()} "
+        f"h={root.winfo_height()} reqh={root.winfo_reqheight()} "
+        f"y={root.winfo_y()} pos={app.cfg['position']}")
     capture(toplevel_hwnd(root), OUT / "clock-orbitron.png")
     root.geometry("+80+80")
     pump(root, 0.2)

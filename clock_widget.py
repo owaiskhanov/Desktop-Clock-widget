@@ -497,20 +497,31 @@ class ClockWidget:
         self.f_world = (family, -int(cfg["world_size"]), "bold")
         self.f_date = (family, -int(cfg["date_size"]))
 
-    def _clamp_to_screen(self) -> None:
+    def _clamp_to_screen(self, recheck: bool = True) -> None:
         """Keep the clock on the primary display after a (re)build.
 
         Orbitron is far wider than the old default, so switching typeface
         must not push digits off the right edge.  Negative origins (a
         monitor left of / above the primary) are left untouched - Tk only
         reports the primary display's size, so we cannot clamp those safely.
+
+        Measured synchronously inside build(), the toplevel may not have
+        taken its new size yet - on Windows winfo_width can still report the
+        stale pre-rebuild (even 1x1) geometry.  So trust the requested size
+        as a lower bound and verify once more on the next idle pass.
         """
         try:
             self.root.update_idletasks()
-            width, height = self.root.winfo_width(), self.root.winfo_height()
+            width = max(self.root.winfo_width(), self.root.winfo_reqwidth())
+            height = max(self.root.winfo_height(), self.root.winfo_reqheight())
             screen_w = self.root.winfo_screenwidth()
             screen_h = self.root.winfo_screenheight()
             x, y = self.root.winfo_x(), self.root.winfo_y()
+            if width <= 1 or height <= 1:       # size not known yet
+                if recheck:
+                    self.root.after_idle(
+                        lambda: self._clamp_to_screen(recheck=False))
+                return
         except tk.TclError:
             return
         new_x = min(x, screen_w - width) if x >= 0 else x
@@ -522,6 +533,12 @@ class ClockWidget:
             self.cfg["position"] = [new_x, new_y]
             try:
                 self.root.geometry(f"+{new_x}+{new_y}")
+            except tk.TclError:
+                pass
+        if recheck:
+            try:
+                self.root.after_idle(
+                    lambda: self._clamp_to_screen(recheck=False))
             except tk.TclError:
                 pass
 
