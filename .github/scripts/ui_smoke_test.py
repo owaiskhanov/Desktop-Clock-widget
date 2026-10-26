@@ -1,0 +1,239 @@
+"""Headless-ish UI smoke test for Windows CI.
+
+Runs the real Tk application, checks that the bundled fonts are registered,
+opens the settings window, applies a font and renders PNG screenshots of the
+widget and of both settings tabs.
+
+Usage:  python .github/scripts/ui_smoke_test.py [output-dir]
+"""
+
+from __future__ import annotations
+
+import ctypes
+import sys
+import time
+import traceback
+from ctypes import wintypes
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
+
+import tkinter as tk                       # noqa: E402
+from tkinter import font as tkfont         # noqa: E402
+
+import clock_widget as cw                  # noqa: E402
+
+OUT = Path(sys.argv[1] if len(sys.argv) > 1 else REPO / "screenshots")
+
+
+# --------------------------------------------------------------------------- #
+# Window capture (PrintWindow works even when the window is not on screen)
+# --------------------------------------------------------------------------- #
+class BITMAPINFOHEADER(ctypes.Structure):
+    _fields_ = [
+        ("biSize", wintypes.DWORD), ("biWidth", wintypes.LONG),
+        ("biHeight", wintypes.LONG), ("biPlanes", wintypes.WORD),
+        ("biBitCount", wintypes.WORD), ("biCompression", wintypes.DWORD),
+        ("biSizeImage", wintypes.DWORD), ("biXPelsPerMeter", wintypes.LONG),
+        ("biYPelsPerMeter", wintypes.LONG), ("biClrUsed", wintypes.DWORD),
+        ("biClrImportant", wintypes.DWORD),
+    ]
+
+
+class BITMAPINFO(ctypes.Structure):
+    _fields_ = [("bmiHeader", BITMAPINFOHEADER),
+                ("bmiColors", wintypes.DWORD * 3)]
+
+
+def toplevel_hwnd(widget) -> int:
+    user32 = ctypes.windll.user32
+    hwnd = widget.winfo_id()
+    parent = user32.GetParent(hwnd)
+    return parent or hwnd
+
+
+def capture(hwnd: int, path: Path) -> None:
+    from PIL import Image
+
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+
+    rect = wintypes.RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    width, height = rect.right - rect.left, rect.bottom - rect.top
+    if width <= 0 or height <= 0:
+        raise RuntimeError(f"window {hwnd} has no area")
+
+    hdc_window = user32.GetWindowDC(hwnd)
+    hdc = gdi32.CreateCompatibleDC(hdc_window)
+    bitmap = gdi32.CreateCompatibleBitmap(hdc_window, width, height)
+    gdi32.SelectObject(hdc, bitmap)
+
+    # 2 = PW_RENDERFULLCONTENT (needed for layered / offscreen windows)
+    if not user32.PrintWindow(hwnd, hdc, 2):
+        user32.PrintWindow(hwnd, hdc, 0)
+
+    info = BITMAPINFO()
+    info.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    info.bmiHeader.biWidth = width
+    info.bmiHeader.biHeight = -height          # top-down
+    info.bmiHeader.biPlanes = 1
+    info.bmiHeader.biBitCount = 32
+    info.bmiHeader.biCompression = 0            # BI_RGB
+
+    buffer = ctypes.create_string_buffer(width * height * 4)
+    gdi32.GetDIBits(hdc, bitmap, 0, height, buffer, ctypes.byref(info), 0)
+
+    image = Image.frombuffer("RGBA", (width, height), buffer.raw,
+                             "raw", "BGRA", 0, 1)
+    image.convert("RGB").save(path)
+
+    gdi32.DeleteObject(bitmap)
+    gdi32.DeleteDC(hdc)
+    user32.ReleaseDC(hwnd, hdc_window)
+    print(f"  captured {path.name}  ({width}x{height})")
+
+
+# --------------------------------------------------------------------------- #
+def pump(root: tk.Tk, seconds: float = 1.0) -> None:
+    end = time.time() + seconds
+    while time.time() < end:
+        root.update()
+        time.sleep(0.02)
+
+
+def check_fonts() -> None:
+    families = {name.lower(): name for name in tkfont.families()}
+    missing = [f["family"] for f in cw.BUNDLED_FONTS
+               if f["family"].lower() not in families]
+    print(f"  bundled families visible to Tk: "
+          f"{len(cw.BUNDLED_FONTS) - len(missing)}/{len(cw.BUNDLED_FONTS)}")
+    if missing:
+        raise AssertionError(f"bundled fonts not registered: {missing}")
+
+    # the family must really resolve, not silently fall back to a default
+    for entry in cw.BUNDLED_FONTS:
+        probe = tkfont.Font(family=entry["family"], size=-80)
+        actual = probe.actual("family")
+        assert actual.lower() == entry["family"].lower(), (
+            f"{entry['family']} resolved to {actual!r}")
+
+
+def check_glyphs(root: tk.Tk) -> None:
+    """Digits must actually differ from the fallback font's digits."""
+    fallback = tkfont.Font(family="NoSuchFontForSure", size=-100)
+    for entry in cw.BUNDLED_FONTS:
+        font = tkfont.Font(family=entry["family"], size=-100, weight="bold")
+        width = font.measure("10:24:37")
+        assert width > 50, f"{entry['family']} measures only {width}px"
+        assert font.measure("1024") != fallback.measure("1024"), (
+            f"{entry['family']} is not rendering")
+
+
+def main() -> int:
+    OUT.mkdir(parents=True, exist_ok=True)
+    cw.enable_dpi_awareness()
+    cw.load_bundled_fonts()
+
+    print("font registration")
+    root = tk.Tk()
+    root.withdraw()
+    check_fonts()
+    check_glyphs(root)
+    root.destroy()
+
+    print("building the clock")
+    cfg = cw.load_config()
+    cfg["font_family"] = cw.BUNDLED_FONTS[0]["family"]
+    cfg["position"] = [80, 80]
+    root = cw.tk.Tk()
+    root.title(cw.APP_NAME)
+    root.overrideredirect(True)
+    root.configure(bg=cfg["transparent_color"])
+    try:
+        root.attributes("-transparentcolor", cfg["transparent_color"])
+    except tk.TclError:
+        pass
+    root.geometry("+80+80")
+
+    app = cw.ClockWidget(root, cfg)
+    pump(root, 1.2)
+    assert app.digit_labels, "the clock has no digit labels"
+    assert len(app.digit_labels) == 6, len(app.digit_labels)
+    print(f"  clock window: {root.winfo_width()}x{root.winfo_height()}")
+    assert 100 < root.winfo_width() < 3000
+
+    print("opening settings")
+    app.open_settings()
+    pump(root, 1.0)
+    settings = app.settings_win
+    assert settings is not None and settings.alive()
+    width = settings.win.winfo_width()
+    height = settings.win.winfo_height()
+    print(f"  settings window: {width}x{height}")
+    assert 520 < width < 1400, width
+    assert 400 < height < 1000, height
+    assert len(settings._cards) == len(cw.BUNDLED_FONTS), len(settings._cards)
+    capture(toplevel_hwnd(settings.win), OUT / "settings-fonts.png")
+
+    print("picking Orbitron")
+    settings._pick("Orbitron")
+    pump(root, 0.4)
+    assert settings.draft["font_family"] == "Orbitron"
+    assert settings.lbl_selected.cget("text").endswith("Orbitron")
+    capture(toplevel_hwnd(settings.win), OUT / "settings-fonts-orbitron.png")
+
+    print("layout tab")
+    settings._show_tab("layout")
+    pump(root, 0.4)
+    capture(toplevel_hwnd(settings.win), OUT / "settings-layout.png")
+
+    print("applying")
+    settings.apply()
+    pump(root, 0.6)
+    assert app.cfg["font_family"] == "Orbitron", app.cfg["font_family"]
+    assert cw.load_config()["font_family"] == "Orbitron"
+
+    print("all installed fonts list")
+    settings._show_all.set(True)
+    settings._rebuild_list()
+    pump(root, 0.8)
+    assert len(settings._cards) > 20, len(settings._cards)
+    settings._show_all.set(False)
+    settings._rebuild_list()
+    pump(root, 0.3)
+
+    settings.close()
+    pump(root, 0.3)
+    assert app.settings_win is None
+
+    print("size sliders")
+    app.apply_settings({"font_family": "Teko", "digit_size": 210,
+                        "show_seconds": False})
+    pump(root, 0.8)
+    assert len(app.digit_labels) == 4, len(app.digit_labels)
+    capture(toplevel_hwnd(root), OUT / "clock-teko-noseconds.png")
+
+    app.apply_settings({"font_family": "Chakra Petch", "digit_size": 150,
+                        "show_seconds": True})
+    pump(root, 0.8)
+    capture(toplevel_hwnd(root), OUT / "clock-chakra.png")
+
+    print("menu")
+    app.popup_menu(type("E", (), {"x_root": 90, "y_root": 90})())
+    pump(root, 0.3)
+    assert app._menu is not None
+    app._menu.unpost()
+
+    root.destroy()
+    print("OK")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)
