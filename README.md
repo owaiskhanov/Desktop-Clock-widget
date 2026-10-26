@@ -135,5 +135,7 @@ assets/icon.ico, assets/icon.png       app icon
   window still runs, but without chroma-key transparency.
 * If *Show desktop icons* is off, Explorer may not create the WorkerW window; the app then
   falls back to bottom-of-z-order placement (still visible, still covered by windows).
+* If the app ever fails to start, a dialog appears and the full traceback is written to
+  `%APPDATA%\DesktopClock\error.log` — attach that file to an issue.
 * Tray icon: not included — the widget is meant to be forgotten about. Close it from the
   right-click menu.
