@@ -40,6 +40,20 @@ jobs:
           path: screenshots/
           if-no-files-found: warn
 
+      - name: Publish screenshots to the PR branch (debug)
+        if: always() && github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f screenshots
+          if git diff --cached --quiet; then
+            echo "no screenshots to publish"
+            exit 0
+          fi
+          git commit -m "chore: UI screenshots [skip ci]"
+          git push origin HEAD:refs/heads/${{ github.head_ref }}
+
       - name: Report UI failure on the pull request
         if: failure() && github.event_name == 'pull_request'
         env:

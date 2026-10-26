@@ -669,6 +669,8 @@ UI_DIM = "#5F666A"
 UI_ACCENT = "#FF6A13"
 UI_ACCENT_TEXT = "#141414"
 
+SETTINGS_W, SETTINGS_H = 880, 726
+
 
 def ui_font_family(root) -> str:
     """First decent UI sans-serif that exists on this machine."""
@@ -747,12 +749,12 @@ class SettingsWindow:
 
     def _center(self) -> None:
         self.win.update_idletasks()
-        w, h = self.win.winfo_reqwidth(), self.win.winfo_reqheight()
+        w, h = SETTINGS_W, SETTINGS_H
         x = self.root.winfo_x() + (self.root.winfo_width() - w) // 2
         y = self.root.winfo_y() + (self.root.winfo_height() - h) // 2
-        x = max(0, min(x, self.win.winfo_screenwidth() - w))
-        y = max(0, min(y, self.win.winfo_screenheight() - h - 60))
-        self.win.geometry(f"+{x}+{y}")
+        x = max(0, min(x, self.win.winfo_screenwidth() - w - 20))
+        y = max(0, min(y, self.win.winfo_screenheight() - h - 70))
+        self.win.geometry(f"{w}x{h}+{x}+{y}")
 
     def f(self, size: int, bold: bool = False):
         return (self.ui, size, "bold") if bold else (self.ui, size)
