@@ -12,6 +12,7 @@ from __future__ import annotations
 import ctypes
 import faulthandler
 import io
+import json
 import os
 import sys
 import threading
@@ -147,6 +148,39 @@ def pump(root: tk.Tk, seconds: float = 1.0) -> None:
         time.sleep(0.02)
 
 
+def check_config_and_defaults() -> None:
+    """Orbitron is the default; untouched v1 configs migrate, others don't."""
+    assert cw.DEFAULT_CONFIG["font_family"] == "Orbitron"
+    assert cw.BUNDLED_FONTS[0]["family"] == "Orbitron"
+    assert cw.DEFAULT_CONFIG["config_version"] == cw.CONFIG_VERSION == 2
+    orig_dir, orig_path = cw.CONFIG_DIR, cw.CONFIG_PATH
+    try:
+        cw.CONFIG_DIR = OUT
+        cw.CONFIG_PATH = OUT / "migration-test-config.json"
+        # a v1.2-era config still on the old default -> Orbitron, persisted
+        cw.CONFIG_PATH.write_text(json.dumps(
+            {"font_family": "Chakra Petch", "digit_size": 150}),
+            encoding="utf-8")
+        cfg = cw.load_config()
+        assert cfg["font_family"] == "Orbitron", cfg["font_family"]
+        assert cfg["digit_size"] == 150
+        saved = json.loads(cw.CONFIG_PATH.read_text(encoding="utf-8"))
+        assert saved["font_family"] == "Orbitron"
+        assert saved["config_version"] == 2
+        # a v1 config where the user picked a font themselves is left alone
+        cw.CONFIG_PATH.write_text(json.dumps({"font_family": "Teko"}),
+                                  encoding="utf-8")
+        assert cw.load_config()["font_family"] == "Teko"
+        # re-picking the old default after migrating must stick
+        cw.CONFIG_PATH.write_text(json.dumps(
+            {"font_family": "Chakra Petch", "config_version": 2}),
+            encoding="utf-8")
+        assert cw.load_config()["font_family"] == "Chakra Petch"
+        cw.CONFIG_PATH.unlink(missing_ok=True)
+    finally:
+        cw.CONFIG_DIR, cw.CONFIG_PATH = orig_dir, orig_path
+
+
 def check_fonts() -> None:
     families = {name.lower(): name for name in tkfont.families()}
     missing = [f["family"] for f in cw.BUNDLED_FONTS
@@ -182,6 +216,9 @@ def main() -> int:
     cw.enable_dpi_awareness()
     cw.load_bundled_fonts()
 
+    print("config defaults + migration")
+    check_config_and_defaults()
+
     print("font registration")
     root = tk.Tk()
     root.withdraw()
@@ -191,7 +228,11 @@ def main() -> int:
 
     print("building the clock")
     cfg = cw.load_config()
-    cfg["font_family"] = cw.BUNDLED_FONTS[0]["family"]
+    # start from a NON-default face so that "Apply -> Orbitron" below is a
+    # real change of the rendered font, not a no-op
+    cfg["font_family"] = "Rajdhani"
+    cfg["digit_size"] = cw.DEFAULT_CONFIG["digit_size"]
+    cfg["show_seconds"] = True
     cfg["position"] = [80, 80]
     root = cw.tk.Tk()
     root.report_callback_exception = cw.log_callback_error
@@ -206,6 +247,7 @@ def main() -> int:
 
     app = cw.ClockWidget(root, cfg)
     pump(root, 1.2)
+    assert app.f_digit[0] == "Rajdhani", app.f_digit
     assert app.digit_labels, "the clock has no digit labels"
     assert len(app.digit_labels) == 6, len(app.digit_labels)
     print(f"  clock window: {root.winfo_width()}x{root.winfo_height()}")
@@ -288,10 +330,24 @@ def main() -> int:
     pump(root, 0.2)
 
     print("applying")
+    width_before = root.winfo_width()
     settings.apply()
     pump(root, 0.6)
     assert app.cfg["font_family"] == "Orbitron", app.cfg["font_family"]
     assert cw.load_config()["font_family"] == "Orbitron"
+    # Regression (v1.2): Apply saved the config but the clock kept rendering
+    # the startup font until a restart.  Assert on what is actually drawn:
+    assert app.f_digit[0] == "Orbitron", app.f_digit
+    assert app.f_caption[0] == "Orbitron", app.f_caption
+    assert app.f_world[0] == "Orbitron", app.f_world
+    assert app.f_date[0] == "Orbitron", app.f_date
+    rendered = tkfont.Font(
+        font=app.digit_labels[0].cget("font")).actual("family")
+    assert rendered == "Orbitron", rendered
+    width_after = root.winfo_width()
+    print(f"  clock width {width_before}px (Rajdhani) -> "
+          f"{width_after}px (Orbitron)")
+    assert width_after > width_before + 100, (width_before, width_after)
 
     print("all installed fonts list")
     settings._show_all.set(True)
@@ -306,6 +362,20 @@ def main() -> int:
     pump(root, 0.3)
     assert app.settings_win is None
 
+    print("wider default font stays on screen")
+    screen_w = root.winfo_screenwidth()
+    root.geometry(f"+{screen_w - 60}+40")
+    pump(root, 0.3)
+    app.apply_settings({"font_family": "Orbitron", "digit_size": 150,
+                        "show_seconds": True})
+    pump(root, 0.5)
+    right = root.winfo_x() + root.winfo_width()
+    print(f"  clock right edge {right} on a {screen_w}px screen")
+    assert right <= screen_w + 2, (right, screen_w)
+    capture(toplevel_hwnd(root), OUT / "clock-orbitron.png")
+    root.geometry("+80+80")
+    pump(root, 0.2)
+
     print("size sliders")
     app.apply_settings({"font_family": "Teko", "digit_size": 210,
                         "show_seconds": False})
@@ -316,6 +386,8 @@ def main() -> int:
     app.apply_settings({"font_family": "Chakra Petch", "digit_size": 150,
                         "show_seconds": True})
     pump(root, 0.8)
+    assert app.f_digit[0] == "Chakra Petch", app.f_digit
+    assert app.f_digit[1] == -150, app.f_digit
     capture(toplevel_hwnd(root), OUT / "clock-chakra.png")
 
     print("compact / high-DPI geometry")

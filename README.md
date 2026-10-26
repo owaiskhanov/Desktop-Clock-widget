@@ -16,9 +16,14 @@ your windows, above your wallpaper, with no title bar and no taskbar button.
 Pure Python + Tkinter: no third-party runtime dependencies, no admin rights, no installer.
 Single `.exe`, ~12 MB.
 
-**New in v1.2** — right-click → *Settings…* opens a real settings window (no JSON
-editing) with a live preview and **ten bundled "cargo industrial" typefaces** that
-travel inside the exe.
+**New in v1.3** — **Orbitron is now the default typeface**, and picking a typeface
+(or a size) in *Settings…* and pressing **Apply** changes the clock immediately.
+In v1.2 the choice was saved but the clock kept its startup font until you
+restarted it; that is fixed. Existing installs that never picked a typeface
+switch to Orbitron automatically on first run — if you chose one yourself, your
+choice is kept. Right-click → *Settings…* still opens the settings window (no
+JSON editing) with a live preview and **ten bundled "cargo industrial"
+typefaces** that travel inside the exe.
 
 ![The settings window](assets/settings.png)
 
@@ -90,12 +95,12 @@ the clock exits. All ten are licensed under the
 
 | Typeface | Character |
 | --- | --- |
-| **Chakra Petch** *(default)* | squared techno |
+| **Orbitron** *(default)* | sci-fi wide instrument panel |
+| Chakra Petch | squared techno |
 | Rajdhani | condensed tech, shipping manifest |
 | Big Shoulders Display | tall cargo stencil |
 | Barlow Condensed | industrial signage |
 | Teko | very condensed LED board |
-| Orbitron | sci-fi wide instrument panel |
 | Quantico | military squared |
 | Oxanium | machined techno |
 | Share Tech Mono | terminal / CRT |
@@ -113,7 +118,8 @@ Edit it and pick *Reload settings* — nothing needs recompiling.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `font_family` | `"Chakra Petch"` | a bundled family or any installed font |
+| `font_family` | `"Orbitron"` | a bundled family or any installed font |
+| `config_version` | `2` | internal — migrates changed defaults between releases; leave it alone |
 | `digit_size` | `150` | height of the big digits in pixels (DPI-independent) |
 | `caption_size` / `world_size` / `date_size` | `13` / `20` / `16` | text sizes |
 | `gap` | `10` | vertical space between rows |

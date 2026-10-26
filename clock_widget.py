@@ -8,8 +8,9 @@ Highlights
 * Drag anywhere with the left mouse button; the position is remembered.
 * Right-click for a small menu: Settings, seconds, world clocks, close.
 * A built-in settings window (no JSON editing needed) with a live preview and
-  eleven bundled, license-free "cargo industrial" typefaces - they travel
-  inside the exe, so every machine renders the clock identically.
+  ten bundled, license-free "cargo industrial" typefaces - Orbitron by
+  default.  They travel inside the exe, so every machine renders the clock
+  identically.
 * Optional plain-JSON escape hatch: %APPDATA%\\DesktopClock\\config.json
 * Runs on Windows without admin rights and needs no third-party packages.
 
@@ -29,7 +30,7 @@ from pathlib import Path
 from tkinter import font as tkfont
 from zoneinfo import ZoneInfo
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 APP_NAME = "DesktopClock"
 IS_WINDOWS = sys.platform.startswith("win")
@@ -37,9 +38,15 @@ IS_WINDOWS = sys.platform.startswith("win")
 # --------------------------------------------------------------------------- #
 # Settings
 # --------------------------------------------------------------------------- #
+# Bumped whenever a default changes so existing configs can be migrated once.
+# v2: Orbitron became the default typeface (was Chakra Petch up to 1.2.x).
+CONFIG_VERSION = 2
+PRE_V2_DEFAULT_FONT = "Chakra Petch"
+
 DEFAULT_CONFIG = {
+    "config_version": CONFIG_VERSION,   # internal - migrates old defaults
     # --- look ------------------------------------------------------------- #
-    "font_family": "Chakra Petch",      # any installed font or a bundled one
+    "font_family": "Orbitron",          # any installed font or a bundled one
     "digit_size": 150,                  # height of the big digits, in pixels
     "caption_size": 13,                 # "hours / minutes / seconds" labels
     "world_size": 20,                   # world clock time size
@@ -90,8 +97,13 @@ FONT_FALLBACKS = [
 # --------------------------------------------------------------------------- #
 BUNDLED_FONTS = [
     {
+        "family": "Orbitron",
+        "blurb": "Sci-fi wide · instrument panel · the default",
+        "files": ["Orbitron-Regular.ttf", "Orbitron-Bold.ttf"],
+    },
+    {
         "family": "Chakra Petch",
-        "blurb": "Squared techno · the default",
+        "blurb": "Squared techno",
         "files": ["ChakraPetch-Regular.ttf", "ChakraPetch-Bold.ttf"],
     },
     {
@@ -114,11 +126,6 @@ BUNDLED_FONTS = [
         "family": "Teko",
         "blurb": "Very condensed · LED board",
         "files": ["Teko-Regular.ttf", "Teko-Bold.ttf"],
-    },
-    {
-        "family": "Orbitron",
-        "blurb": "Sci-fi wide · instrument panel",
-        "files": ["Orbitron-Regular.ttf", "Orbitron-Bold.ttf"],
     },
     {
         "family": "Quantico",
@@ -183,8 +190,13 @@ def load_bundled_fonts() -> list[str]:
     for ttf in sorted(folder.glob("*.ttf")):
         try:
             if _gdi32 is not None:
-                if _gdi32.AddFontResourceExW(str(ttf), FR_PRIVATE, 0):
-                    _loaded_font_files.append(str(ttf))
+                # the return value is the number of faces added; 0 = rejected
+                if not _gdi32.AddFontResourceExW(str(ttf), FR_PRIVATE, 0):
+                    print(f"{APP_NAME}: Windows refused font {ttf.name} "
+                          f"(error {ctypes.get_last_error()})",
+                          file=sys.stderr)
+                    continue
+                _loaded_font_files.append(str(ttf))
             # other platforms: the system must know the family already
             loaded.append(ttf.stem)
         except Exception:
@@ -381,10 +393,32 @@ def load_config() -> dict:
         if CONFIG_PATH.exists():
             user = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
             if isinstance(user, dict):
+                version = user.get("config_version", 1)
+                if not isinstance(version, int):
+                    version = 1
                 cfg.update({k: v for k, v in user.items() if k in DEFAULT_CONFIG})
+                if version < CONFIG_VERSION:
+                    cfg = migrate_config(cfg, version)
+                    save_config(cfg)   # migrate once, then never touch it again
     except (OSError, ValueError) as exc:
         print(f"{APP_NAME}: could not read config ({exc}); using defaults",
               file=sys.stderr)
+    return cfg
+
+
+def migrate_config(cfg: dict, from_version: int) -> dict:
+    """Bring an older config up to date - only untouched defaults change.
+
+    v1 -> v2: Orbitron replaced Chakra Petch as the default typeface, so a
+    config still on the old default moves to Orbitron.  Anyone who picked a
+    typeface themselves keeps their choice.
+    """
+    if from_version < 2:
+        family = cfg.get("font_family")
+        if isinstance(family, str) and \
+                family.lower() == PRE_V2_DEFAULT_FONT.lower():
+            cfg["font_family"] = DEFAULT_CONFIG["font_family"]   # Orbitron
+    cfg["config_version"] = CONFIG_VERSION
     return cfg
 
 
@@ -397,10 +431,22 @@ def save_config(cfg: dict) -> None:
 
 
 def pick_font_family(requested: str, available: set[str]) -> str:
+    """The requested family, else a bundled one, else any sensible monospace.
+
+    Bundled faces come before the system fallbacks on purpose: they ship in
+    the exe, so one of them (Orbitron first) is always expected to resolve.
+    Only if font registration failed entirely do we land on Consolas & co.
+    """
+    if not isinstance(requested, str):
+        requested = ""
     lowered = {name.lower(): name for name in available}
-    for candidate in [requested, *FONT_FALLBACKS]:
+    for candidate in [requested, *bundled_family_names(), *FONT_FALLBACKS]:
         if candidate and candidate.lower() in lowered:
-            return lowered[candidate.lower()]
+            chosen = lowered[candidate.lower()]
+            if requested and chosen.lower() != requested.lower():
+                print(f"{APP_NAME}: font {requested!r} is not available; "
+                      f"using {chosen!r} instead", file=sys.stderr)
+            return chosen
     return "Courier"
 
 
@@ -415,26 +461,73 @@ class ClockWidget:
         self._drag = None
         self._offset = [0, 0]              # position tracked ourselves (see drag)
 
-        self.bg = cfg["transparent_color"]
-        root.configure(bg=self.bg)
-
-        family = pick_font_family(cfg["font_family"], set(tkfont.families(root)))
-        # negative sizes = pixels, so the layout is DPI-independent
-        self.f_digit = (family, -int(cfg["digit_size"]), "bold")
-        self.f_caption = (family, -int(cfg["caption_size"]))
-        self.f_world = (family, -int(cfg["world_size"]), "bold")
-        self.f_date = (family, -int(cfg["date_size"]))
-
-        self.frame = tk.Frame(root, bg=self.bg)
+        self.frame = tk.Frame(root, bg=cfg["transparent_color"])
         self.frame.pack(ipadx=1, ipady=1)   # tiny padding keeps glyph edges clean
+        self._refresh_style()
 
         self.layer = DesktopLayer(root, behind_icons=bool(cfg.get("behind_icons")))
         self.build()
         self._bind_events()
         self.update_clock()
 
+    # -- style ----------------------------------------------------------- #
+    def _refresh_style(self) -> None:
+        """Re-derive fonts and the key colour from the *current* config.
+
+        This used to happen only once, in __init__, which is why picking a
+        new typeface (or size) in Settings updated the preview and the saved
+        config but left the clock itself in the startup font until a restart.
+        build() calls this first, so Apply / Reload now take effect at once.
+        """
+        cfg = self.cfg
+        self.bg = cfg["transparent_color"]
+        self.root.configure(bg=self.bg)
+        self.frame.configure(bg=self.bg)
+        try:
+            self.root.attributes("-transparentcolor", self.bg)
+        except tk.TclError:
+            pass
+
+        family = pick_font_family(cfg["font_family"],
+                                  set(tkfont.families(self.root)))
+        self.font_family = family
+        # negative sizes = pixels, so the layout is DPI-independent
+        self.f_digit = (family, -int(cfg["digit_size"]), "bold")
+        self.f_caption = (family, -int(cfg["caption_size"]))
+        self.f_world = (family, -int(cfg["world_size"]), "bold")
+        self.f_date = (family, -int(cfg["date_size"]))
+
+    def _clamp_to_screen(self) -> None:
+        """Keep the clock on the primary display after a (re)build.
+
+        Orbitron is far wider than the old default, so switching typeface
+        must not push digits off the right edge.  Negative origins (a
+        monitor left of / above the primary) are left untouched - Tk only
+        reports the primary display's size, so we cannot clamp those safely.
+        """
+        try:
+            self.root.update_idletasks()
+            width, height = self.root.winfo_width(), self.root.winfo_height()
+            screen_w = self.root.winfo_screenwidth()
+            screen_h = self.root.winfo_screenheight()
+            x, y = self.root.winfo_x(), self.root.winfo_y()
+        except tk.TclError:
+            return
+        new_x = min(x, screen_w - width) if x >= 0 else x
+        new_y = min(y, screen_h - height) if y >= 0 else y
+        new_x, new_y = max(new_x, 0) if x >= 0 else new_x, \
+            max(new_y, 0) if y >= 0 else new_y
+        if (new_x, new_y) != (x, y):
+            self._offset = [new_x, new_y]
+            self.cfg["position"] = [new_x, new_y]
+            try:
+                self.root.geometry(f"+{new_x}+{new_y}")
+            except tk.TclError:
+                pass
+
     # -- layout ---------------------------------------------------------- #
     def build(self) -> None:
+        self._refresh_style()
         for child in self.frame.winfo_children():
             child.destroy()
         cfg, bg = self.cfg, self.bg
@@ -511,6 +604,7 @@ class ClockWidget:
                 self.world_labels.append((t, tz))
 
         self.root.update_idletasks()
+        self._clamp_to_screen()
         self.layer.apply(cfg["keep_on_desktop"])
 
     # -- interaction ----------------------------------------------------- #
@@ -1050,7 +1144,10 @@ class SettingsWindow:
 
     def _restyle_preview(self) -> None:
         """Re-derive every preview font and colour from the current draft."""
-        fam = self.draft["font_family"]
+        # resolve exactly like ClockWidget does, so the preview can never
+        # promise a face the clock itself would not render
+        fam = pick_font_family(self.draft["font_family"],
+                               set(tkfont.families(self.root)))
         # A miniature of the real widget: pixel sizes, roughly scaled down.
         big = -max(22, min(int(self.draft["digit_size"]
                              * self.preview_factor), 104))
@@ -1221,7 +1318,7 @@ class SettingsWindow:
     def _reset_look(self) -> None:
         for key in ("font_family", "digit_size", "caption_size", "date_size",
                     "world_size", "text_color", "caption_color", "date_color",
-                    "gap"):
+                    "gap", "date_format"):
             self.draft[key] = DEFAULT_CONFIG[key]
         for key, scale in self._scales.items():
             scale.set(self.draft[key])
