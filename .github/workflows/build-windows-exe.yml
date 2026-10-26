@@ -31,7 +31,8 @@ jobs:
         run: python -c "import zoneinfo; print(zoneinfo.ZoneInfo('Europe/Kyiv'))"
 
       - name: UI smoke test (fonts + settings window)
-        run: python .github/scripts/ui_smoke_test.py screenshots
+        timeout-minutes: 6
+        run: python -u .github/scripts/ui_smoke_test.py screenshots
 
       - uses: actions/upload-artifact@v5
         if: always()

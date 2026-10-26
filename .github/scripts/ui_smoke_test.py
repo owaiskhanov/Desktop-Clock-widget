@@ -10,7 +10,11 @@ Usage:  python .github/scripts/ui_smoke_test.py [output-dir]
 from __future__ import annotations
 
 import ctypes
+import faulthandler
+import io
+import os
 import sys
+import threading
 import time
 import traceback
 from ctypes import wintypes
@@ -25,6 +29,33 @@ from tkinter import font as tkfont         # noqa: E402
 import clock_widget as cw                  # noqa: E402
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else REPO / "screenshots")
+
+
+def _report(text: str) -> None:
+    print(text, flush=True)
+    try:
+        OUT.mkdir(parents=True, exist_ok=True)
+        (OUT / "failure.txt").write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+    for line in text.strip().splitlines()[-14:]:
+        print(f"::error::{line[:900]}", flush=True)
+
+
+def watchdog(seconds: float = 120.0) -> None:
+    """Never let a hung Tk dialog stall a CI runner forever."""
+
+    def dump() -> None:
+        buffer = io.StringIO()
+        buffer.write(f"UI smoke test hung for {seconds:.0f}s - stack dump:\n")
+        faulthandler.dump_traceback(file=buffer, all_threads=True)
+        _report(buffer.getvalue())
+        sys.stdout.flush()
+        os._exit(1)
+
+    timer = threading.Timer(seconds, dump)
+    timer.daemon = True
+    timer.start()
 
 
 # --------------------------------------------------------------------------- #
@@ -92,7 +123,7 @@ def capture(hwnd: int, path: Path) -> None:
     gdi32.DeleteObject(bitmap)
     gdi32.DeleteDC(hdc)
     user32.ReleaseDC(hwnd, hdc_window)
-    print(f"  captured {path.name}  ({width}x{height})")
+    print(f"  captured {path.name}  ({width}x{height})", flush=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -133,6 +164,7 @@ def check_glyphs(root: tk.Tk) -> None:
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    watchdog(180.0)
     cw.enable_dpi_awareness()
     cw.load_bundled_fonts()
 
@@ -235,13 +267,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception:
-        text = traceback.format_exc()
-        print(text)
-        try:
-            (OUT / "failure.txt").write_text(text, encoding="utf-8")
-        except OSError:
-            pass
-        # surface the tail of the traceback as a check annotation
-        for line in text.strip().splitlines()[-12:]:
-            print(f"::error::{line.replace(chr(10), ' ')[:900]}")
+        _report(traceback.format_exc())
         sys.exit(1)
