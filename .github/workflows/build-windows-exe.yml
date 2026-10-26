@@ -42,21 +42,18 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish screenshots to the PR branch (debug)
+        id: publish
         if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
         shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f screenshots
-          if git diff --cached --quiet; then
-            echo "no screenshots to publish"
-            exit 0
-          fi
-          git commit -m "chore: UI screenshots [skip ci]"
-          git push origin HEAD:refs/heads/${{ github.head_ref }}
+          set -o pipefail
+          .github/scripts/publish_screenshots.sh 2>&1 | tee publish.log
 
       - name: Report UI failure on the pull request
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() || steps.publish.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -69,6 +66,15 @@ jobs:
               echo '```'
             } > /tmp/report.md
             gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/report.md
+          fi
+          if [ -f publish.log ]; then
+            {
+              echo 'Publishing the screenshots failed:'
+              echo '```'
+              tail -40 publish.log
+              echo '```'
+            } > /tmp/publish.md
+            gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/publish.md
           fi
 
       - name: Build the executable
