@@ -1,0 +1,57 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -r requirements.txt
+
+      - name: Sanity check the timezone database
+        run: python -c "import zoneinfo; print(zoneinfo.ZoneInfo('Europe/Kyiv'))"
+
+      - name: Build the executable
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name DesktopClock
+          --icon assets/icon.ico
+          --add-data "assets/icon.ico;assets"
+          --add-data "assets/icon.png;assets"
+          --copy-metadata tzdata
+          --collect-data tzdata
+          clock_widget.py
+
+      - name: Show artifact size
+        run: dir dist
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: DesktopClock-windows-x64
+          path: dist/DesktopClock.exe
+          if-no-files-found: error
+
+      - name: Attach the exe to a GitHub release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/DesktopClock.exe
+          generate_release_notes: true
