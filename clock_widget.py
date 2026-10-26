@@ -20,6 +20,7 @@ import copy
 import json
 import os
 import sys
+import traceback
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
@@ -519,7 +520,32 @@ class ClockWidget:
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
+LOG_PATH = CONFIG_DIR / "error.log"
+
+
+def report_crash(exc_type, exc, tb) -> None:
+    """A windowed exe has no console, so never die silently."""
+    text = "".join(traceback.format_exception(exc_type, exc, tb))
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        LOG_PATH.write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+    try:
+        if IS_WINDOWS:
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                f"DesktopClock hit an error and must close.\n\n"
+                f"{exc_type.__name__}: {exc}\n\nDetails: {LOG_PATH}",
+                "DesktopClock", 0x10)
+        else:
+            print(text, file=sys.stderr)
+    except Exception:
+        pass
+
+
 def main() -> None:
+    sys.excepthook = report_crash
     enable_dpi_awareness()
     cfg = load_config()
     if not CONFIG_PATH.exists():
