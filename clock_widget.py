@@ -669,7 +669,8 @@ UI_DIM = "#5F666A"
 UI_ACCENT = "#FF6A13"
 UI_ACCENT_TEXT = "#141414"
 
-SETTINGS_W, SETTINGS_H = 880, 726
+SETTINGS_W = 920
+CARD_COLUMNS, CARD_HEIGHT = 3, 68
 
 
 def ui_font_family(root) -> str:
@@ -682,6 +683,61 @@ def ui_font_family(root) -> str:
     return "TkDefaultFont"
 
 
+class ThinScrollbar(tk.Canvas):
+    """A 6 px accent thumb - the native Windows scrollbar is too loud."""
+
+    def __init__(self, master, command, **kw):
+        super().__init__(master, width=6, bg=UI_BG, highlightthickness=0,
+                         bd=0, **kw)
+        self._command = command
+        self._first, self._last = 0.0, 1.0
+        self._grab_offset = 0
+        self._thumb = self.create_rectangle(0, 0, 6, 20, fill=UI_LINE,
+                                            outline="")
+        self.bind("<Configure>", lambda _e: self._redraw())
+        self.bind("<Button-1>", self._press)
+        self.bind("<B1-Motion>", self._drag)
+
+    # tk.Scrollbar protocol ------------------------------------------------
+    def set(self, first, last) -> None:
+        self._first, self._last = float(first), float(last)
+        self._redraw()
+
+    # internals -----------------------------------------------------------
+    def _thumb_span(self):
+        height = max(self.winfo_height(), 1)
+        top = self._first * height
+        bottom = max(self._last * height, top + 18)
+        return top, min(bottom, height)
+
+    def _redraw(self) -> None:
+        top, bottom = self._thumb_span()
+        self.coords(self._thumb, 1, top, 5, bottom)
+        if self._last - self._first >= 0.999:
+            self.itemconfigure(self._thumb, fill=UI_BG)      # nothing to scroll
+        else:
+            self.itemconfigure(self._thumb, fill=UI_LINE)
+
+    def _press(self, event) -> None:
+        top, bottom = self._thumb_span()
+        if top <= event.y <= bottom:
+            self._grab_offset = event.y - top
+        else:
+            self._grab_offset = (bottom - top) / 2
+            self._move_to(event.y)
+
+    def _drag(self, event) -> None:
+        self._move_to(event.y)
+
+    def _move_to(self, y: int) -> None:
+        height = max(self.winfo_height(), 1)
+        top, bottom = self._thumb_span()
+        span = max(bottom - top, 1)
+        first = (y - self._grab_offset) / height
+        first = max(0.0, min(first, 1.0 - span / height))
+        self._command("moveto", first)
+
+
 class SettingsWindow:
     """A small, dark, industrial settings sheet for the clock."""
 
@@ -692,6 +748,8 @@ class SettingsWindow:
         self.ui = ui_font_family(self.root)
         self._cards: dict[str, list] = {}
         self._swatches: dict[str, tk.Frame] = {}
+        self._swatch_colors: dict[str, str] = {}
+        self._scales: dict[str, tk.Scale] = {}
         self._tick_id = None
         self._show_all = tk.BooleanVar(value=False)
 
@@ -749,7 +807,9 @@ class SettingsWindow:
 
     def _center(self) -> None:
         self.win.update_idletasks()
-        w, h = SETTINGS_W, SETTINGS_H
+        outer = self.win.winfo_children()[0]
+        w = max(SETTINGS_W, outer.winfo_reqwidth())
+        h = outer.winfo_reqheight()
         x = self.root.winfo_x() + (self.root.winfo_width() - w) // 2
         y = self.root.winfo_y() + (self.root.winfo_height() - h) // 2
         x = max(0, min(x, self.win.winfo_screenwidth() - w - 20))
@@ -863,13 +923,13 @@ class SettingsWindow:
     # -- font page ------------------------------------------------------- #
     def _build_font_page(self, page) -> None:
         preview = tk.Frame(page, bg=UI_PANEL, highlightthickness=1,
-                           highlightbackground=UI_LINE, height=176)
+                           highlightbackground=UI_LINE, height=168)
         preview.pack(fill="x")
         preview.pack_propagate(False)
         self._build_preview(preview)
 
         strip = tk.Frame(page, bg=UI_BG)
-        strip.pack(fill="x", pady=(12, 10))
+        strip.pack(fill="x", pady=(11, 8))
         self.lbl_list_title = self._label(strip, "BUNDLED TYPEFACES", size=8,
                                           bold=True, color=UI_DIM)
         self.lbl_list_title.pack(side="left")
@@ -885,17 +945,15 @@ class SettingsWindow:
             activebackground=UI_BG, activeforeground=UI_TEXT,
             selectcolor=UI_CARD, bd=0, highlightthickness=0, anchor="w",
             cursor="hand2")
-        self.chk_all.pack(anchor="w", pady=(0, 10))
+        self.chk_all.pack(anchor="w", pady=(0, 8))
 
         # scrollable card list
-        holder = tk.Frame(page, bg=UI_BG, height=330)
+        holder = tk.Frame(page, bg=UI_BG)
         holder.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(holder, bg=UI_BG, highlightthickness=0, bd=0)
-        bar = tk.Scrollbar(holder, orient="vertical", command=self.canvas.yview,
-                           width=10, bg=UI_CARD, troughcolor=UI_BG,
-                           activebackground=UI_ACCENT, relief="flat", bd=0)
-        self.canvas.configure(yscrollcommand=bar.set)
-        bar.pack(side="right", fill="y", padx=(6, 0))
+        self.scrollbar = ThinScrollbar(holder, command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.pack(side="right", fill="y", padx=(5, 2))
         self.canvas.pack(side="left", fill="both", expand=True)
 
         self.list_inner = tk.Frame(self.canvas, bg=UI_BG)
@@ -982,8 +1040,8 @@ class SettingsWindow:
             self.lbl_list_title.config(text="BUNDLED TYPEFACES")
         blurbs = {font["family"]: font["blurb"] for font in BUNDLED_FONTS}
 
-        self.list_inner.columnconfigure(0, weight=1, uniform="cards")
-        self.list_inner.columnconfigure(1, weight=1, uniform="cards")
+        for column in range(CARD_COLUMNS):
+            self.list_inner.columnconfigure(column, weight=1, uniform="cards")
         for index, family in enumerate(families):
             self._add_card(family, blurbs.get(family, ""), index)
         self._refresh_selection()
@@ -991,21 +1049,24 @@ class SettingsWindow:
 
     def _add_card(self, family: str, blurb: str, index: int) -> None:
         card = tk.Frame(self.list_inner, bg=UI_CARD, cursor="hand2",
-                        highlightthickness=1, highlightbackground=UI_CARD)
-        card.grid(row=index // 2, column=index % 2, sticky="nsew",
-                  padx=(0, 8), pady=(0, 8), ipadx=2, ipady=2)
+                        highlightthickness=1, highlightbackground=UI_CARD,
+                        height=CARD_HEIGHT)
+        card.grid(row=index // CARD_COLUMNS, column=index % CARD_COLUMNS,
+                  sticky="nsew", padx=(0, 7), pady=(0, 7))
+        card.pack_propagate(False)
+        card.grid_propagate(False)
         card.columnconfigure(0, weight=1)
 
-        name = tk.Label(card, text=family, font=(family, 13), fg=UI_TEXT,
+        name = tk.Label(card, text=family, font=(family, 12), fg=UI_TEXT,
                         bg=UI_CARD, anchor="w")
-        name.grid(row=0, column=0, sticky="w", padx=(12, 4), pady=(9, 0))
-        sample = tk.Label(card, text="10:24", font=(family, 13, "bold"),
+        name.grid(row=0, column=0, sticky="w", padx=(11, 2), pady=(9, 0))
+        sample = tk.Label(card, text="10:24", font=(family, 15, "bold"),
                           fg=UI_MUTED, bg=UI_CARD, anchor="e")
-        sample.grid(row=0, column=1, sticky="e", padx=(0, 12), pady=(9, 0))
+        sample.grid(row=0, column=1, sticky="e", padx=(0, 11), pady=(7, 0))
         sub = tk.Label(card, text=blurb or "installed", font=self.f(8),
                        fg=UI_DIM, bg=UI_CARD, anchor="w")
         sub.grid(row=1, column=0, columnspan=2, sticky="w",
-                 padx=12, pady=(0, 9))
+                 padx=11, pady=(1, 9))
 
         parts = (card, name, sample, sub)
         self._cards[family] = [card, name, sample, sub]
@@ -1061,27 +1122,25 @@ class SettingsWindow:
 
     # -- layout page ----------------------------------------------------- #
     def _build_layout_page(self, page) -> None:
-        left = tk.Frame(page, bg=UI_BG)
+        left = tk.Frame(page, bg=UI_BG, width=430)
         left.pack(side="left", fill="both", expand=True)
+        left.pack_propagate(False)
         right = tk.Frame(page, bg=UI_BG)
-        right.pack(side="left", fill="both", expand=True, padx=(30, 0))
+        right.pack(side="left", fill="both", expand=True, padx=(34, 0))
 
-        self._label(left, "SIZE", size=8, bold=True, color=UI_DIM).pack(
-            anchor="w", pady=(0, 8))
-        self._slider(left, "Digits", "digit_size", 60, 260)
+        self._section(left, "SIZE")
+        self._slider(left, "Digit height", "digit_size", 60, 280)
         self._slider(left, "Captions", "caption_size", 8, 30)
-        self._slider(left, "Date", "date_size", 8, 32)
+        self._slider(left, "Date line", "date_size", 8, 32)
         self._slider(left, "World clocks", "world_size", 10, 36)
 
-        self._label(left, "COLOUR", size=8, bold=True, color=UI_DIM).pack(
-            anchor="w", pady=(18, 8))
+        self._section(left, "COLOUR", top=20)
         swatch_row = tk.Frame(left, bg=UI_BG)
         swatch_row.pack(anchor="w", fill="x")
         for index, (name, text, caption, date) in enumerate(COLOR_PRESETS):
             self._swatch(swatch_row, name, text, caption, date, index)
 
-        self._label(right, "SHOW", size=8, bold=True, color=UI_DIM).pack(
-            anchor="w", pady=(0, 8))
+        self._section(right, "SHOW")
         self._toggle(right, "Seconds", "show_seconds")
         self._toggle(right, "24-hour clock", "clock_24h")
         self._toggle(right, "Date line", "show_date")
@@ -1089,19 +1148,58 @@ class SettingsWindow:
         self._toggle(right, "World clocks", "show_world_clocks")
         self._toggle(right, "Stay on desktop", "keep_on_desktop")
 
-        self._label(right, "NOTE", size=8, bold=True, color=UI_DIM).pack(
-            anchor="w", pady=(18, 6))
-        self._label(right, "Sizes are in screen pixels, so the clock looks\n"
-                           "the same on every display scale.",
-                    size=8, color=UI_MUTED, justify="left").pack(anchor="w")
+        self._section(right, "DATE LINE", top=18)
+        self._label(right, "Any strftime pattern, e.g. %A, %d %B "
+                           "or %d.%m.%Y", size=8, color=UI_DIM).pack(anchor="w")
+        entry_row = tk.Frame(right, bg=UI_BG)
+        entry_row.pack(fill="x", pady=(6, 0))
+        self.date_entry = tk.Entry(
+            entry_row, font=self.f(10), bg=UI_CARD, fg=UI_TEXT,
+            insertbackground=UI_ACCENT, relief="flat", bd=0,
+            highlightthickness=1, highlightbackground=UI_LINE,
+            highlightcolor=UI_ACCENT, width=24)
+        self.date_entry.insert(0, self.draft["date_format"])
+        self.date_entry.pack(side="left", ipady=6, ipadx=8)
+        self.date_entry.bind("<KeyRelease>", self._date_changed)
+        self._label(entry_row, "empty = hidden", size=8,
+                    color=UI_DIM).pack(side="left", padx=(10, 0))
+
+        self._section(right, "RESET", top=18)
+        self._button(right, "Restore default look", self._reset_look,
+                     width=22).pack(anchor="w")
+
+    def _section(self, parent, text: str, top: int = 0) -> None:
+        self._label(parent, text, size=8, bold=True, color=UI_DIM).pack(
+            anchor="w", pady=(top, 8))
+
+    def _date_changed(self, _event=None) -> None:
+        self.draft["date_format"] = self.date_entry.get()
+        self._preview_tick()
+
+    def _reset_look(self) -> None:
+        for key in ("font_family", "digit_size", "caption_size", "date_size",
+                    "world_size", "text_color", "caption_color", "date_color",
+                    "gap"):
+            self.draft[key] = DEFAULT_CONFIG[key]
+        for scale, key in self._scales.items():
+            scale.set(self.draft[key])
+        self.date_entry.delete(0, "end")
+        self.date_entry.insert(0, self.draft["date_format"])
+        self.lbl_selected.config(text=f"current · {self.draft['font_family']}")
+        self._restyle_preview()
+        self._refresh_selection()
+        self._refresh_swatches()
+        self._preview_tick()
 
     def _slider(self, parent, label: str, key: str, low: int, high: int) -> None:
         row = tk.Frame(parent, bg=UI_BG)
-        row.pack(fill="x", pady=(0, 6))
-        self._label(row, label, size=9, color=UI_TEXT, width=12,
-                    anchor="w").pack(side="left")
-        value = self._label(row, str(self.draft[key]), size=9, bold=True,
-                            color=UI_ACCENT, width=4, anchor="e")
+        row.pack(fill="x", pady=(0, 9))
+        head = tk.Frame(row, bg=UI_BG)
+        head.pack(fill="x")
+        self._label(head, label, size=9, color=UI_MUTED, anchor="w").pack(
+            side="left")
+        value = self._label(head, str(self.draft[key]), size=9, bold=True,
+                            color=UI_ACCENT, anchor="e")
         value.pack(side="right")
 
         def changed(raw):
@@ -1114,17 +1212,17 @@ class SettingsWindow:
                          command=changed, bg=UI_BG, fg=UI_TEXT,
                          troughcolor=UI_CARD, activebackground=UI_ACCENT,
                          highlightthickness=0, bd=0, relief="flat",
-                         sliderrelief="flat", sliderlength=14, width=5,
-                         length=170, showvalue=0, cursor="hand2")
+                         sliderrelief="flat", sliderlength=16, width=6,
+                         showvalue=0, cursor="hand2")
         scale.set(self.draft[key])
-        scale.pack(side="left", padx=(0, 8), fill="x", expand=True)
+        scale.pack(fill="x", pady=(1, 0))
+        self._scales[key] = scale
 
     def _toggle(self, parent, label: str, key: str) -> None:
         var = tk.BooleanVar(value=bool(self.draft[key]))
 
         def changed():
             self.draft[key] = bool(var.get())
-            self._restyle_preview()
             self._preview_tick()
 
         chk = tk.Checkbutton(parent, text="  " + label, variable=var,
@@ -1133,35 +1231,38 @@ class SettingsWindow:
                              activeforeground=UI_TEXT, selectcolor=UI_CARD,
                              bd=0, highlightthickness=0, anchor="w",
                              cursor="hand2")
-        chk.pack(anchor="w", pady=2)
+        chk.pack(anchor="w", pady=1)
 
     def _swatch(self, parent, name: str, text: str, caption: str,
                 date: str, index: int) -> None:
         cell = tk.Frame(parent, bg=UI_BG, cursor="hand2",
                         highlightthickness=1, highlightbackground=UI_BG)
-        cell.grid(row=0, column=index, padx=(0, 6))
-        chip = tk.Frame(cell, bg=text, width=30, height=16,
+        cell.grid(row=0, column=index, padx=(0, 7))
+        chip = tk.Frame(cell, bg=text, width=38, height=20,
                         highlightthickness=1, highlightbackground=UI_LINE)
-        chip.pack(padx=4, pady=(4, 2))
+        chip.pack(padx=5, pady=(5, 3))
         chip.pack_propagate(False)
         self._label(cell, name, size=7, color=UI_MUTED, bg=UI_BG).pack(
-            pady=(0, 4))
+            pady=(0, 5))
 
         def pick(_event=None):
             self.draft.update(text_color=text, caption_color=caption,
                               date_color=date)
             self._restyle_preview()
+            self._refresh_swatches()
             self._preview_tick()
-            for frame in self._swatches.values():
-                frame.config(highlightbackground=UI_BG)
-            cell.config(highlightbackground=UI_ACCENT)
 
         for widget in (cell, chip, *cell.winfo_children()):
             widget.bind("<Button-1>", pick)
         self._swatches[name] = cell
+        self._swatch_colors[name] = text
+        self._refresh_swatches()
 
-        if (self.draft["text_color"].upper() == text.upper()):
-            cell.config(highlightbackground=UI_ACCENT)
+    def _refresh_swatches(self) -> None:
+        current = str(self.draft.get("text_color", "")).upper()
+        for name, cell in self._swatches.items():
+            selected = self._swatch_colors.get(name, "").upper() == current
+            cell.config(highlightbackground=UI_ACCENT if selected else UI_BG)
 
     # -- live preview ---------------------------------------------------- #
     def _tick(self) -> None:

@@ -208,7 +208,16 @@ def main() -> int:
     assert 520 < width < 1400, width
     assert 400 < height < 1000, height
     assert len(settings._cards) == len(cw.BUNDLED_FONTS), len(settings._cards)
+    rows = max(int(c.grid_info()["row"]) for c in settings.list_inner.winfo_children()) + 1
+    print(f"  cards: {len(settings._cards)} in {rows} rows")
+    assert rows <= 4, rows
     capture(toplevel_hwnd(settings.win), OUT / "settings-fonts.png")
+
+    print("scroll list with the wheel")
+    settings._on_wheel(type("E", (), {"delta": -120, "num": None})())
+    pump(root, 0.2)
+    settings.canvas.yview_moveto(0)
+    pump(root, 0.2)
 
     print("picking Orbitron")
     settings._pick("Orbitron")
@@ -221,6 +230,24 @@ def main() -> int:
     settings._show_tab("layout")
     pump(root, 0.4)
     capture(toplevel_hwnd(settings.win), OUT / "settings-layout.png")
+
+    print("date format + colour + slider")
+    settings.date_entry.delete(0, "end")
+    settings.date_entry.insert(0, "%d.%m.%Y  ·  W%V")
+    settings.date_entry.event_generate("<KeyRelease>")
+    pump(root, 0.3)
+    assert settings.draft["date_format"].startswith("%d.%m.%Y")
+    settings._swatches["Cargo"].winfo_children()[0].event_generate("<Button-1>")
+    pump(root, 0.3)
+    assert settings.draft["text_color"] == "#FF6A13", settings.draft["text_color"]
+    settings._scales["digit_size"].set(180)
+    pump(root, 0.3)
+    assert settings.draft["digit_size"] == 180
+    capture(toplevel_hwnd(settings.win), OUT / "settings-layout-cargo.png")
+    settings._reset_look()
+    pump(root, 0.3)
+    assert settings.draft["text_color"] == "#FFFFFF"
+    settings._show_tab("font")
 
     print("applying")
     settings.apply()
