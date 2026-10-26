@@ -16,6 +16,12 @@ your windows, above your wallpaper, with no title bar and no taskbar button.
 Pure Python + Tkinter: no third-party runtime dependencies, no admin rights, no installer.
 Single `.exe`, ~12 MB.
 
+**New in v1.2** — right-click → *Settings…* opens a real settings window (no JSON
+editing) with a live preview and **ten bundled "cargo industrial" typefaces** that
+travel inside the exe.
+
+![The settings window](assets/settings.png)
+
 ---
 
 ## Get the EXE
@@ -48,7 +54,7 @@ PyInstaller). The script creates a venv, installs PyInstaller, and writes
 | Action | What happens |
 | --- | --- |
 | **Left-drag** anywhere on the clock | move it (position is remembered) |
-| **Right-click** | menu: settings file, reload, seconds on/off, 24-hour clock, world clocks, stay-on-desktop, close |
+| **Right-click** | menu: *Settings…*, reload, seconds on/off, 24-hour clock, world clocks, stay-on-desktop, close |
 | `Esc`-free | there is no title bar, so close from the right-click menu |
 
 The clock is pinned just above the wallpaper, so `Win + D` / *Show desktop* will not
@@ -61,18 +67,53 @@ hide it, and a full-screen window will cover it — it behaves like part of the 
 
 ## Settings
 
-Everything is one JSON file, created on first run:
+Right-click the clock → **Settings…**
+
+Two tabs, everything previews live, **Apply** saves:
+
+* **TYPE** — a miniature of the clock that re-renders the moment you click a
+  typeface, plus a card list where every row is drawn in its own font.
+  Tick *Show every font installed on this PC* to use any system font instead.
+* **LAYOUT** — pixel sizes for digits / captions / date / world clocks, show-hide
+  toggles, six colour presets, a free-form date pattern and a one-click
+  *Restore default look*.
+
+Esc closes the window, `config.json` is one click away in the footer.
+
+### Bundled typefaces
+
+These ship inside `assets/fonts` (and inside the exe). They are registered
+*privately* for the process with `AddFontResourceExW(FR_PRIVATE)` — nothing is
+installed into the Windows font folder, no admin rights, and they disappear when
+the clock exits. All ten are licensed under the
+[SIL Open Font License](assets/fonts/LICENSES.txt).
+
+| Typeface | Character |
+| --- | --- |
+| **Chakra Petch** *(default)* | squared techno |
+| Rajdhani | condensed tech, shipping manifest |
+| Big Shoulders Display | tall cargo stencil |
+| Barlow Condensed | industrial signage |
+| Teko | very condensed LED board |
+| Orbitron | sci-fi wide instrument panel |
+| Quantico | military squared |
+| Oxanium | machined techno |
+| Share Tech Mono | terminal / CRT |
+| JetBrains Mono | clean coding monospace |
+
+### config.json (optional)
+
+Everything is mirrored to one JSON file, created on first run:
 
 ```
 %APPDATA%\DesktopClock\config.json
 ```
 
-Open it from the right-click menu (*Edit settings file*), change values, then
-*Reload settings*. Nothing needs recompiling.
+Edit it and pick *Reload settings* — nothing needs recompiling.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `font_family` | `"Consolas"` | any installed font; monospace looks best (`"Cascadia Mono"`, `"JetBrains Mono"`, `"Fira Code"`) |
+| `font_family` | `"Chakra Petch"` | a bundled family or any installed font |
 | `digit_size` | `150` | height of the big digits in pixels (DPI-independent) |
 | `caption_size` / `world_size` / `date_size` | `13` / `20` / `16` | text sizes |
 | `gap` | `10` | vertical space between rows |
@@ -90,13 +131,14 @@ Open it from the right-click menu (*Edit settings file*), change values, then
 | `behind_icons` | `false` | `true` = sink *under* the desktop icons (they overlap the clock) |
 | `position` | `null` | `[x, y]`, maintained automatically |
 
-Example — big black clock for a light wallpaper, one world clock:
+Example — big black Cargo clock for a light wallpaper, one world clock:
 
 ```json
 {
-  "text_color": "#000000",
-  "caption_color": "#5A5A5A",
-  "date_color": "#3C3C3C",
+  "font_family": "Teko",
+  "text_color": "#FF6A13",
+  "caption_color": "#A9500F",
+  "date_color": "#D07B36",
   "digit_size": 220,
   "world_clocks": [["Tokyo", "Asia/Tokyo"]]
 }
@@ -118,15 +160,19 @@ Example — big black clock for a light wallpaper, one world clock:
   seconds change exactly when your system clock does.
 * `zoneinfo` + the bundled `tzdata` package means world clocks work on Windows, which
   ships without an IANA timezone database.
+* Bundled fonts are registered per-process *before* the first Tk window exists, because
+  Tk snapshots its font table when the root window is created.
 
 ## Files
 
 ```
-clock_widget.py                        the whole app (~450 lines)
+clock_widget.py                        the whole app (~1300 lines)
 build_exe.bat                          local one-click build
 requirements.txt                       tzdata (bundled into the exe)
-.github/workflows/build-windows-exe.yml  builds + uploads the exe on every push
+.github/workflows/build-windows-exe.yml  UI test + builds/uploads the exe
 assets/icon.ico, assets/icon.png       app icon
+assets/fonts/*.ttf                     ten bundled OFL typefaces + LICENSES.txt
+.github/scripts/ui_smoke_test.py       Windows UI test (screenshots in CI)
 ```
 
 ## Notes / limitations

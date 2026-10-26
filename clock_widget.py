@@ -1036,7 +1036,8 @@ class SettingsWindow:
                 self.pv_colon.append(cl)
 
         self.pv_world = self._label(grid, "", size=8, color=UI_DIM, bg=UI_PANEL)
-        self.pv_world.grid(row=3, column=0, columnspan=5, pady=(8, 8))
+        self.pv_world.grid(row=3, column=0, columnspan=5, pady=(10, 4))
+        grid.pack_configure(pady=(2, 12))
         self._restyle_preview()
 
     def _restyle_preview(self) -> None:
