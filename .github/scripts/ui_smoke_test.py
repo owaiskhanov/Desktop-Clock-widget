@@ -205,8 +205,9 @@ def main() -> int:
     width = settings.win.winfo_width()
     height = settings.win.winfo_height()
     print(f"  settings window: {width}x{height}")
+    screen_h = settings.win.winfo_screenheight()
     assert 520 < width < 1400, width
-    assert 400 < height < 1000, height
+    assert 400 < height <= screen_h - 40, (height, screen_h)
     assert len(settings._cards) == len(cw.BUNDLED_FONTS), len(settings._cards)
     rows = max(int(c.grid_info()["row"]) for c in settings.list_inner.winfo_children()) + 1
     print(f"  cards: {len(settings._cards)} in {rows} rows")

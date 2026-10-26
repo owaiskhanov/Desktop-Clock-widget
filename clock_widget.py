@@ -671,7 +671,7 @@ UI_ACCENT_TEXT = "#141414"
 
 SETTINGS_W = 920
 CARD_COLUMNS, CARD_HEIGHT = 3, 74
-PREVIEW_H = 208
+CARD_LIST_H = 318
 
 
 def ui_font_family(root) -> str:
@@ -809,12 +809,24 @@ class SettingsWindow:
     def _center(self) -> None:
         self.win.update_idletasks()
         outer = self.win.winfo_children()[0]
+        screen_w, screen_h = (self.win.winfo_screenwidth(),
+                              self.win.winfo_screenheight())
         w = max(SETTINGS_W, outer.winfo_reqwidth())
         h = outer.winfo_reqheight()
+
+        max_h = screen_h - 90                      # title bar + taskbar + slack
+        if h > max_h:
+            excess = h - max_h
+            new_h = max(150, self.canvas.winfo_height() - excess)
+            self.canvas.configure(height=new_h)
+            self._fit_pages()
+            self.win.update_idletasks()
+            h = min(outer.winfo_reqheight(), max_h)
+
         x = self.root.winfo_x() + (self.root.winfo_width() - w) // 2
         y = self.root.winfo_y() + (self.root.winfo_height() - h) // 2
-        x = max(0, min(x, self.win.winfo_screenwidth() - w - 20))
-        y = max(0, min(y, self.win.winfo_screenheight() - h - 70))
+        x = max(0, min(x, screen_w - w - 20))
+        y = max(0, min(y, screen_h - h - 70))
         self.win.geometry(f"{w}x{h}+{x}+{y}")
 
     def f(self, size: int, bold: bool = False):
@@ -891,8 +903,16 @@ class SettingsWindow:
 
         self._build_font_page(self.page_font)
         self._build_layout_page(self.page_layout)
+        self._fit_pages()
         self._build_footer(outer)
         self._show_tab("font")
+
+    def _fit_pages(self) -> None:
+        """place()d pages do not propagate their size, so measure them."""
+        self.pages.update_idletasks()
+        height = max(self.page_font.winfo_reqheight(),
+                     self.page_layout.winfo_reqheight())
+        self.pages.configure(height=max(height, 1))
 
     def _show_tab(self, key: str) -> None:
         for name, lbl in self._tab_buttons.items():
@@ -924,9 +944,8 @@ class SettingsWindow:
     # -- font page ------------------------------------------------------- #
     def _build_font_page(self, page) -> None:
         preview = tk.Frame(page, bg=UI_PANEL, highlightthickness=1,
-                           highlightbackground=UI_LINE, height=PREVIEW_H)
+                           highlightbackground=UI_LINE)
         preview.pack(fill="x")
-        preview.pack_propagate(False)
         self._build_preview(preview)
 
         strip = tk.Frame(page, bg=UI_BG)
@@ -951,7 +970,8 @@ class SettingsWindow:
         # scrollable card list
         holder = tk.Frame(page, bg=UI_BG)
         holder.pack(fill="both", expand=True)
-        self.canvas = tk.Canvas(holder, bg=UI_BG, highlightthickness=0, bd=0)
+        self.canvas = tk.Canvas(holder, bg=UI_BG, highlightthickness=0, bd=0,
+                                height=CARD_LIST_H, width=400)
         self.scrollbar = ThinScrollbar(holder, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.scrollbar.pack(side="right", fill="y", padx=(5, 2))
