@@ -19,6 +19,7 @@ pyinstaller --noconfirm --clean --onefile --windowed ^
     --icon assets\icon.ico ^
     --add-data "assets\icon.ico;assets" ^
     --add-data "assets\icon.png;assets" ^
+    --add-data "assets\fonts;assets\fonts" ^
     --copy-metadata tzdata ^
     --collect-data tzdata ^
     clock_widget.py || goto :error
