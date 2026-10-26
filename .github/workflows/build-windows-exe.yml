@@ -41,17 +41,6 @@ jobs:
           path: screenshots/
           if-no-files-found: warn
 
-      - name: Publish screenshots to the PR branch (debug)
-        id: publish
-        if: always() && github.event_name == 'pull_request'
-        continue-on-error: true
-        shell: bash
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -o pipefail
-          .github/scripts/publish_screenshots.sh 2>&1 | tee publish.log
-
       - name: Report UI failure on the pull request
         if: failure() && github.event_name == 'pull_request'
         env:

@@ -340,7 +340,8 @@ def main() -> int:
         assert list_h >= 140, list_h
         assert h <= screen_h - 30, (h, screen_h)
         assert w <= screen_w - 20, (w, screen_w)
-        capture_widget(settings2.win, OUT / f"settings-{screen_h}p.png")
+        if w <= root.winfo_screenwidth() and h <= root.winfo_screenheight():
+            capture_widget(settings2.win, OUT / f"settings-{screen_h}p.png")
         settings2.close()
         pump(root, 0.2)
     root.winfo_fpixels = real_fpixels
