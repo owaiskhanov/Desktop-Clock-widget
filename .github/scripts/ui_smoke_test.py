@@ -84,15 +84,16 @@ def toplevel_hwnd(widget) -> int:
     return parent or hwnd
 
 
-def capture(hwnd: int, path: Path) -> None:
+def capture(hwnd: int, path: Path, width: int = 0, height: int = 0) -> None:
     from PIL import Image
 
     user32 = ctypes.windll.user32
     gdi32 = ctypes.windll.gdi32
 
-    rect = wintypes.RECT()
-    user32.GetWindowRect(hwnd, ctypes.byref(rect))
-    width, height = rect.right - rect.left, rect.bottom - rect.top
+    if not (width and height):
+        rect = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        width, height = rect.right - rect.left, rect.bottom - rect.top
     if width <= 0 or height <= 0:
         raise RuntimeError(f"window {hwnd} has no area")
 
@@ -124,6 +125,18 @@ def capture(hwnd: int, path: Path) -> None:
     gdi32.DeleteDC(hdc)
     user32.ReleaseDC(hwnd, hdc_window)
     print(f"  captured {path.name}  ({width}x{height})", flush=True)
+
+
+def capture_widget(widget, path: Path) -> None:
+    """Capture a Tk Toplevel at its logical size.
+
+    PrintWindow reports device pixels, so on a scaled screen the image would
+    disagree with the geometry the layout was computed from.  Cropping to the
+    logical size keeps the screenshots comparable across DPIs.
+    """
+    widget.update_idletasks()
+    capture(toplevel_hwnd(widget), path,
+            width=widget.winfo_width(), height=widget.winfo_height())
 
 
 # --------------------------------------------------------------------------- #
@@ -233,7 +246,7 @@ def main() -> int:
                  for lbl in settings.pv_digits + settings.pv_colon)
     print(f"  preview content: {bottom}px in a {panel.winfo_height()}px panel")
     assert bottom <= panel.winfo_height(), (bottom, panel.winfo_height())
-    capture(toplevel_hwnd(settings.win), OUT / "settings-fonts.png")
+    capture_widget(settings.win, OUT / "settings-fonts.png")
 
     print("scroll list with the wheel")
     settings._on_wheel(type("E", (), {"delta": -120, "num": None})())
@@ -246,12 +259,12 @@ def main() -> int:
     pump(root, 0.4)
     assert settings.draft["font_family"] == "Orbitron"
     assert settings.lbl_selected.cget("text").endswith("Orbitron")
-    capture(toplevel_hwnd(settings.win), OUT / "settings-fonts-orbitron.png")
+    capture_widget(settings.win, OUT / "settings-fonts-orbitron.png")
 
     print("layout tab")
     settings._show_tab("layout")
     pump(root, 0.4)
-    capture(toplevel_hwnd(settings.win), OUT / "settings-layout.png")
+    capture_widget(settings.win, OUT / "settings-layout.png")
 
     print("date format + colour + slider")
     settings.date_entry.delete(0, "end")
@@ -265,7 +278,7 @@ def main() -> int:
     settings._scales["digit_size"].set(180)
     pump(root, 0.3)
     assert settings.draft["digit_size"] == 180
-    capture(toplevel_hwnd(settings.win), OUT / "settings-layout-cargo.png")
+    capture_widget(settings.win, OUT / "settings-layout-cargo.png")
     settings._reset_look()
     pump(root, 0.3)
     assert settings.draft["text_color"] == "#FFFFFF"
@@ -327,7 +340,7 @@ def main() -> int:
         assert list_h >= 140, list_h
         assert h <= screen_h - 30, (h, screen_h)
         assert w <= screen_w - 20, (w, screen_w)
-        capture(toplevel_hwnd(settings2.win), OUT / f"settings-{screen_h}p.png")
+        capture_widget(settings2.win, OUT / f"settings-{screen_h}p.png")
         settings2.close()
         pump(root, 0.2)
     root.winfo_fpixels = real_fpixels
