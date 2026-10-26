@@ -1265,6 +1265,17 @@ def report_crash(exc_type, exc, tb) -> None:
         pass
 
 
+def log_callback_error(exc_type, exc, tb) -> None:
+    """Tk callback exceptions: write to error.log instead of a modal dialog."""
+    text = "".join(traceback.format_exception(exc_type, exc, tb))
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        LOG_PATH.write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+    print(text, file=sys.stderr)
+
+
 def main() -> None:
     sys.excepthook = report_crash
     enable_dpi_awareness()
@@ -1275,6 +1286,7 @@ def main() -> None:
         save_config(cfg)
 
     root = tk.Tk()
+    root.report_callback_exception = log_callback_error
     root.title(APP_NAME)
     apply_window_icon(root)
     root.overrideredirect(True)              # no title bar, no taskbar button

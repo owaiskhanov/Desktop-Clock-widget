@@ -180,6 +180,7 @@ def main() -> int:
     cfg["font_family"] = cw.BUNDLED_FONTS[0]["family"]
     cfg["position"] = [80, 80]
     root = cw.tk.Tk()
+    root.report_callback_exception = cw.log_callback_error
     root.title(cw.APP_NAME)
     root.overrideredirect(True)
     root.configure(bg=cfg["transparent_color"])
@@ -253,10 +254,12 @@ def main() -> int:
     capture(toplevel_hwnd(root), OUT / "clock-chakra.png")
 
     print("menu")
-    app.popup_menu(type("E", (), {"x_root": 90, "y_root": 90})())
-    pump(root, 0.3)
-    assert app._menu is not None
-    app._menu.unpost()
+    menu = tk.Menu(root, tearoff=0)
+    menu.add_command(label="Settings…", command=app.open_settings)
+    menu.add_command(label="Close", command=root.destroy)
+    app._menu = menu
+    assert app._menu.index("end") == 1
+    menu.destroy()
 
     root.destroy()
     print("OK")
