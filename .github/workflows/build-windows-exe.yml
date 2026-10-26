@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build:
@@ -38,6 +39,22 @@ jobs:
           name: ui-screenshots
           path: screenshots/
           if-no-files-found: warn
+
+      - name: Report UI failure on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [ -f screenshots/failure.txt ]; then
+            {
+              echo 'UI smoke test failed on Windows. Traceback:'
+              echo '```'
+              cat screenshots/failure.txt
+              echo '```'
+            } > /tmp/report.md
+            gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/report.md
+          fi
 
       - name: Build the executable
         run: >

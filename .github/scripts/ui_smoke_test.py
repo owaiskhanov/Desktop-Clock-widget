@@ -235,5 +235,13 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception:
-        traceback.print_exc()
+        text = traceback.format_exc()
+        print(text)
+        try:
+            (OUT / "failure.txt").write_text(text, encoding="utf-8")
+        except OSError:
+            pass
+        # surface the tail of the traceback as a check annotation
+        for line in text.strip().splitlines()[-12:]:
+            print(f"::error::{line.replace(chr(10), ' ')[:900]}")
         sys.exit(1)
